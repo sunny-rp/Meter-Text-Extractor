@@ -11,6 +11,7 @@ export function useCamera() {
 
   const startCamera = useCallback(async () => {
     try {
+      console.log("[v0] Starting camera initialization")
       setError(null)
       setIsStreaming(false)
 
@@ -24,44 +25,83 @@ export function useCamera() {
         streamRef.current = null
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const constraints = {
         video: {
-          facingMode: "environment",
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920, max: 1920 },
+          height: { ideal: 1080, max: 1080 },
         },
-      })
+      }
+
+      console.log("[v0] Requesting camera access with constraints:", constraints)
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      console.log("[v0] Camera stream obtained successfully")
 
       streamRef.current = stream
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
 
-        const handleLoadedMetadata = () => {
-          setIsStreaming(true)
-          videoRef.current?.removeEventListener("loadedmetadata", handleLoadedMetadata)
-        }
-
-        videoRef.current.addEventListener("loadedmetadata", handleLoadedMetadata)
-
-        setTimeout(() => {
-          if (videoRef.current && videoRef.current.readyState >= 2) {
-            setIsStreaming(true)
+        const videoLoadPromise = new Promise((resolve, reject) => {
+          const video = videoRef.current
+          if (!video) {
+            reject(new Error("Video element not available"))
+            return
           }
-        }, 1000)
+
+          const handleLoadedMetadata = () => {
+            console.log("[v0] Video metadata loaded, setting streaming to true")
+            video.removeEventListener("loadedmetadata", handleLoadedMetadata)
+            video.removeEventListener("error", handleError)
+            setIsStreaming(true)
+            resolve()
+          }
+
+          const handleError = (e) => {
+            console.error("[v0] Video loading error:", e)
+            video.removeEventListener("loadedmetadata", handleLoadedMetadata)
+            video.removeEventListener("error", handleError)
+            reject(new Error("Failed to load video stream"))
+          }
+
+          video.addEventListener("loadedmetadata", handleLoadedMetadata)
+          video.addEventListener("error", handleError)
+
+          // Fallback timeout
+          setTimeout(() => {
+            if (video.readyState >= 2) {
+              handleLoadedMetadata()
+            }
+          }, 2000)
+        })
+
+        await videoLoadPromise
       }
     } catch (err) {
-      console.error("Camera access error:", err)
+      console.error("[v0] Camera access error:", err)
       let errorMessage = "Failed to access camera"
 
       if (err.name === "NotAllowedError") {
-        errorMessage = "Permission denied. Please allow camera access."
+        errorMessage = "Permission denied. Please allow camera access and refresh the page."
       } else if (err.name === "NotFoundError") {
         errorMessage = "No camera found on this device."
       } else if (err.name === "NotSupportedError") {
         errorMessage = "Camera not supported in this browser."
       } else if (err.name === "NotReadableError") {
         errorMessage = "Camera is already in use by another application."
+      } else if (err.name === "OverconstrainedError") {
+        errorMessage = "Camera constraints not supported. Trying with basic settings..."
+        try {
+          const basicStream = await navigator.mediaDevices.getUserMedia({ video: true })
+          streamRef.current = basicStream
+          if (videoRef.current) {
+            videoRef.current.srcObject = basicStream
+            setIsStreaming(true)
+            return
+          }
+        } catch (fallbackErr) {
+          console.error("[v0] Fallback camera access failed:", fallbackErr)
+        }
       }
 
       setError(errorMessage)
