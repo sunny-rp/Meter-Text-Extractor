@@ -1,8 +1,9 @@
-// Web Worker for OCR processing (optional enhancement)
-// This file can be used for even better performance isolation
+importScripts("https://unpkg.com/tesseract.js@5/dist/tesseract.min.js")
 
-const Tesseract = self.Tesseract
+const Tesseract = window.Tesseract // Declare the Tesseract variable
+
 let worker = null
+let isInitializing = false
 
 self.onmessage = async (e) => {
   const { type, imageData, options = {} } = e.data
@@ -10,13 +11,36 @@ self.onmessage = async (e) => {
   try {
     switch (type) {
       case "initialize":
+        if (isInitializing) {
+          return // Prevent multiple initialization attempts
+        }
+
         if (!worker) {
+          isInitializing = true
+
           worker = await Tesseract.createWorker("eng", 1, {
             logger: (m) => {
+              let progress = 0
+              let status = "Initializing..."
+
+              if (m.status === "loading tesseract core") {
+                progress = Math.round(m.progress * 30)
+                status = "Loading OCR engine..."
+              } else if (m.status === "initializing tesseract") {
+                progress = 30 + Math.round(m.progress * 20)
+                status = "Initializing..."
+              } else if (m.status === "loading language traineddata") {
+                progress = 50 + Math.round(m.progress * 30)
+                status = "Loading language data..."
+              } else if (m.status === "initializing api") {
+                progress = 80 + Math.round(m.progress * 20)
+                status = "Preparing OCR..."
+              }
+
               self.postMessage({
                 type: "progress",
-                progress: m.progress * 100,
-                status: m.status,
+                progress,
+                status,
               })
             },
           })
@@ -28,6 +52,8 @@ self.onmessage = async (e) => {
             tessedit_pageseg_mode: options.pageSegMode || "1",
             preserve_interword_spaces: "1",
           })
+
+          isInitializing = false
         }
 
         self.postMessage({
@@ -47,7 +73,7 @@ self.onmessage = async (e) => {
             if (m.status === "recognizing text") {
               self.postMessage({
                 type: "progress",
-                progress: m.progress * 100,
+                progress: Math.round(m.progress * 100),
                 status: "Recognizing text...",
               })
             }
@@ -56,8 +82,10 @@ self.onmessage = async (e) => {
 
         self.postMessage({
           type: "result",
-          text: text.trim(),
-          confidence: Math.round(confidence),
+          result: {
+            text: text.trim(),
+            confidence: Math.round(confidence),
+          },
         })
         break
 
@@ -65,6 +93,7 @@ self.onmessage = async (e) => {
         if (worker) {
           await worker.terminate()
           worker = null
+          isInitializing = false
         }
         self.postMessage({ type: "terminated" })
         break
@@ -73,9 +102,18 @@ self.onmessage = async (e) => {
         throw new Error(`Unknown message type: ${type}`)
     }
   } catch (error) {
+    console.error("OCR Worker Error:", error)
     self.postMessage({
       type: "error",
       error: error.message,
     })
   }
+}
+
+self.onerror = (error) => {
+  console.error("OCR Worker Global Error:", error)
+  self.postMessage({
+    type: "error",
+    error: `Worker error: ${error.message || "Unknown error"}`,
+  })
 }

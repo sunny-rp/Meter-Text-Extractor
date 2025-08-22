@@ -16,12 +16,17 @@ export function useCamera() {
 
       // Stop any existing stream
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current.getTracks().forEach((track) => {
+          if (track.readyState !== "ended") {
+            track.stop()
+          }
+        })
+        streamRef.current = null
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: "environment", // Use back camera on mobile
+          facingMode: "environment",
           width: { ideal: 1920 },
           height: { ideal: 1080 },
         },
@@ -31,9 +36,19 @@ export function useCamera() {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        videoRef.current.onloadedmetadata = () => {
+
+        const handleLoadedMetadata = () => {
           setIsStreaming(true)
+          videoRef.current?.removeEventListener("loadedmetadata", handleLoadedMetadata)
         }
+
+        videoRef.current.addEventListener("loadedmetadata", handleLoadedMetadata)
+
+        setTimeout(() => {
+          if (videoRef.current && videoRef.current.readyState >= 2) {
+            setIsStreaming(true)
+          }
+        }, 1000)
       }
     } catch (err) {
       console.error("Camera access error:", err)
@@ -55,11 +70,17 @@ export function useCamera() {
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current.getTracks().forEach((track) => {
+        if (track.readyState !== "ended") {
+          track.stop()
+        }
+      })
       streamRef.current = null
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null
+      // Remove any lingering event listeners
+      videoRef.current.removeEventListener("loadedmetadata", () => {})
     }
     setIsStreaming(false)
   }, [])

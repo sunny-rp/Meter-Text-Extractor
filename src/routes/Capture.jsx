@@ -14,8 +14,26 @@ function Capture() {
   const [toast, setToast] = useState(null)
 
   useEffect(() => {
-    startCamera()
-    return () => stopCamera()
+    let mounted = true
+
+    const initCamera = async () => {
+      try {
+        if (mounted) {
+          await startCamera()
+        }
+      } catch (err) {
+        if (mounted) {
+          console.error("Camera initialization error:", err)
+        }
+      }
+    }
+
+    initCamera()
+
+    return () => {
+      mounted = false
+      stopCamera()
+    }
   }, [startCamera, stopCamera])
 
   const handleCapture = async () => {
@@ -30,6 +48,7 @@ function Capture() {
         })
       }
     } catch (err) {
+      console.error("Capture error:", err)
       setToast({
         type: "error",
         message: "Failed to capture image. Please try again.",
