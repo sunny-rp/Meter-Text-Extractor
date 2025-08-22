@@ -11,6 +11,10 @@ function CameraPreview({ videoRef, isStreaming, error, onRetry }) {
     }
   }, [error])
 
+  useEffect(() => {
+    console.log("[v0] CameraPreview state:", { isStreaming, error, permissionDenied })
+  }, [isStreaming, error, permissionDenied])
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white p-6">
