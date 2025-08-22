@@ -91,8 +91,10 @@ function CameraPreview({ videoRef, isStreaming, error, onRetry }) {
         autoPlay
         playsInline
         muted
+        controls={false}
         className="absolute inset-0 w-full h-full object-cover"
         aria-label="Camera preview"
+        style={{ transform: "scaleX(-1)" }} // Mirror the video for better UX
       />
 
       {/* Overlay guide */}

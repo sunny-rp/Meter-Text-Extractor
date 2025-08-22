@@ -44,52 +44,55 @@ export function useCamera() {
       streamRef.current = stream
 
       if (videoRef.current) {
-        videoRef.current.srcObject = stream
-
         const video = videoRef.current
+        video.srcObject = stream
 
-        // Set up event listeners before attempting to play
-        const handleCanPlay = () => {
-          console.log("[v0] Video can play, setting streaming to true")
-          video.removeEventListener("canplay", handleCanPlay)
-          video.removeEventListener("error", handleVideoError)
+        const handleVideoReady = () => {
+          console.log("[v0] Video ready, setting streaming to true")
           setIsStreaming(true)
         }
 
         const handleVideoError = (e) => {
           console.error("[v0] Video error:", e)
-          video.removeEventListener("canplay", handleCanPlay)
-          video.removeEventListener("error", handleVideoError)
           setError("Failed to display video stream")
         }
 
-        video.addEventListener("canplay", handleCanPlay)
-        video.addEventListener("error", handleVideoError)
+        // Set up event listeners
+        video.addEventListener("loadedmetadata", handleVideoReady, { once: true })
+        video.addEventListener("canplay", handleVideoReady, { once: true })
+        video.addEventListener("error", handleVideoError, { once: true })
 
         // Try to play the video
         try {
           await video.play()
           console.log("[v0] Video play started successfully")
 
-          // If we get here and video is ready, set streaming immediately
-          if (video.readyState >= 3) {
-            // HAVE_FUTURE_DATA
+          if (video.readyState >= 2) {
+            // HAVE_CURRENT_DATA
             console.log("[v0] Video ready immediately, readyState:", video.readyState)
-            setIsStreaming(true)
+            handleVideoReady()
           }
         } catch (playError) {
           console.log("[v0] Video autoplay failed (normal on some browsers):", playError.message)
-          // This is normal - many browsers block autoplay, but the video will still work
-          // We'll rely on the canplay event to set streaming state
+          // Still set streaming true since we have the stream
+          handleVideoReady()
         }
 
-        // Fallback timeout - if nothing happens in 5 seconds, try to set streaming anyway
-        setTimeout(() => {
-          if (!isStreaming && video.readyState >= 1) {
+        const timeoutId = setTimeout(() => {
+          if (video.readyState >= 1) {
+            // HAVE_METADATA
             console.log("[v0] Fallback: Setting streaming true after timeout, readyState:", video.readyState)
-            setIsStreaming(true)
+            handleVideoReady()
           }
-        }, 5000)
+        }, 3000) // Reduced timeout to 3 seconds
+
+        // Cleanup timeout when component unmounts
+        return () => {
+          clearTimeout(timeoutId)
+          video.removeEventListener("loadedmetadata", handleVideoReady)
+          video.removeEventListener("canplay", handleVideoReady)
+          video.removeEventListener("error", handleVideoError)
+        }
       }
     } catch (err) {
       console.error("[v0] Camera access error:", err)
@@ -140,6 +143,7 @@ export function useCamera() {
     if (videoRef.current) {
       videoRef.current.srcObject = null
       // Remove any lingering event listeners
+      videoRef.current.removeEventListener("loadedmetadata", () => {})
       videoRef.current.removeEventListener("canplay", () => {})
       videoRef.current.removeEventListener("error", () => {})
     }
