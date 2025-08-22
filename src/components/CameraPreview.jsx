@@ -75,6 +75,7 @@ function CameraPreview({ videoRef, isStreaming, error, onRetry }) {
         <p className="text-sm" aria-live="polite">
           Starting camera...
         </p>
+        <p className="text-xs text-gray-400 mt-2">If this takes too long, check browser permissions</p>
       </div>
     )
   }

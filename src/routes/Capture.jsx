@@ -19,11 +19,12 @@ function Capture() {
     const initCamera = async () => {
       try {
         if (mounted) {
+          console.log("[v0] Initializing camera from Capture component")
           await startCamera()
         }
       } catch (err) {
         if (mounted) {
-          console.error("Camera initialization error:", err)
+          console.error("[v0] Camera initialization error in Capture:", err)
         }
       }
     }
@@ -31,6 +32,7 @@ function Capture() {
     initCamera()
 
     return () => {
+      console.log("[v0] Capture component unmounting, stopping camera")
       mounted = false
       stopCamera()
     }

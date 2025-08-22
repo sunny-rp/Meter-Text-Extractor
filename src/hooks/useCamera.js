@@ -15,6 +15,10 @@ export function useCamera() {
       setError(null)
       setIsStreaming(false)
 
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera not supported in this browser")
+      }
+
       // Stop any existing stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => {
@@ -67,12 +71,16 @@ export function useCamera() {
           video.addEventListener("loadedmetadata", handleLoadedMetadata)
           video.addEventListener("error", handleError)
 
-          // Fallback timeout
           setTimeout(() => {
-            if (video.readyState >= 2) {
+            if (video.readyState >= 1) {
+              // HAVE_METADATA or higher
+              console.log("[v0] Video ready via timeout, readyState:", video.readyState)
               handleLoadedMetadata()
+            } else {
+              console.log("[v0] Video not ready after timeout, readyState:", video.readyState)
+              reject(new Error("Video loading timeout"))
             }
-          }, 2000)
+          }, 3000)
         })
 
         await videoLoadPromise
@@ -92,19 +100,25 @@ export function useCamera() {
       } else if (err.name === "OverconstrainedError") {
         errorMessage = "Camera constraints not supported. Trying with basic settings..."
         try {
+          console.log("[v0] Trying fallback camera settings")
           const basicStream = await navigator.mediaDevices.getUserMedia({ video: true })
           streamRef.current = basicStream
           if (videoRef.current) {
             videoRef.current.srcObject = basicStream
             setIsStreaming(true)
+            setError(null)
             return
           }
         } catch (fallbackErr) {
           console.error("[v0] Fallback camera access failed:", fallbackErr)
+          errorMessage = "Camera access failed with basic settings"
         }
+      } else if (err.message) {
+        errorMessage = err.message
       }
 
       setError(errorMessage)
+      setIsStreaming(false)
     }
   }, [])
 
